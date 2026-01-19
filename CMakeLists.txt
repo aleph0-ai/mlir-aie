@@ -222,6 +222,7 @@ set_target_properties(aie-headers PROPERTIES FOLDER "Misc")
 add_dependencies(aie-headers mlir-headers)
 
 option(AIE_INCLUDE_DOCS "Generate build targets for the MLIR AIE docs." OFF)
+option(AIE_ENABLE_LIT_TESTS "Build MLIR-AIE lit-based tests/examples." OFF)
 if(AIE_INCLUDE_DOCS)
   # Make sure we build the docs
   add_custom_target(docs ALL)
@@ -291,10 +292,12 @@ endif()
 
 
 # Last because each of these has its own CMakeLists.txt which reloads/re-finds LLVM, thus resettings globals.
-add_subdirectory(programming_examples)
-add_subdirectory(programming_guide)
-add_subdirectory(test)
-add_subdirectory(mlir_tutorials)
+if(AIE_ENABLE_LIT_TESTS)
+  add_subdirectory(programming_examples)
+  add_subdirectory(programming_guide)
+  add_subdirectory(test)
+  add_subdirectory(mlir_tutorials)
+endif()
 add_subdirectory(cmake/modules)
 
 get_filename_component(COMPILER_DIRECTORY ${CMAKE_CXX_COMPILER} DIRECTORY)
