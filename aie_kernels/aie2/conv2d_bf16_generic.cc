@@ -27,6 +27,7 @@ void KERNEL_NAME(
     int32_t in_h,
     int32_t in_w,
     int32_t in_c,
+    int32_t groups,
     int32_t out_c,
     int32_t k_h,
     int32_t k_w,
@@ -39,30 +40,44 @@ void KERNEL_NAME(
     if (batch <= 0 || in_h <= 0 || in_w <= 0 || in_c <= 0 || out_c <= 0 || k_h <= 0 || k_w <= 0) {
         return;
     }
+    if (groups <= 0) {
+        return;
+    }
+    if (in_c % groups != 0 || out_c % groups != 0) {
+        return;
+    }
     if (stride_h <= 0 || stride_w <= 0) {
         return;
     }
+    int32_t in_c_group = in_c / groups;
+    int32_t out_c_group = out_c / groups;
     for (int32_t n = 0; n < batch; ++n) {
-        for (int32_t oc = 0; oc < out_c; ++oc) {
-            for (int32_t oh = 0; oh < out_h; ++oh) {
-                for (int32_t ow = 0; ow < out_w; ++ow) {
-                    float acc = 0.0f;
-                    for (int32_t ic = 0; ic < in_c; ++ic) {
-                        for (int32_t kh = 0; kh < k_h; ++kh) {
-                            for (int32_t kw = 0; kw < k_w; ++kw) {
-                                int32_t ih = oh * stride_h - pad_top + kh;
-                                int32_t iw = ow * stride_w - pad_left + kw;
-                                if (ih < 0 || ih >= in_h || iw < 0 || iw >= in_w) {
-                                    continue;
+        for (int32_t g = 0; g < groups; ++g) {
+            int32_t in_c_base = g * in_c_group;
+            int32_t out_c_base = g * out_c_group;
+            for (int32_t oc = 0; oc < out_c_group; ++oc) {
+                int32_t oc_global = out_c_base + oc;
+                for (int32_t oh = 0; oh < out_h; ++oh) {
+                    for (int32_t ow = 0; ow < out_w; ++ow) {
+                        float acc = 0.0f;
+                        for (int32_t ic = 0; ic < in_c_group; ++ic) {
+                            int32_t ic_global = in_c_base + ic;
+                            for (int32_t kh = 0; kh < k_h; ++kh) {
+                                for (int32_t kw = 0; kw < k_w; ++kw) {
+                                    int32_t ih = oh * stride_h - pad_top + kh;
+                                    int32_t iw = ow * stride_w - pad_left + kw;
+                                    if (ih < 0 || ih >= in_h || iw < 0 || iw >= in_w) {
+                                        continue;
+                                    }
+                                    int32_t in_idx = (((n * in_c + ic_global) * in_h) + ih) * in_w + iw;
+                                    int32_t w_idx = (((oc_global * in_c_group) + ic) * k_h + kh) * k_w + kw;
+                                    acc += static_cast<float>(input[in_idx]) * static_cast<float>(weights[w_idx]);
                                 }
-                                int32_t in_idx = (((n * in_c + ic) * in_h) + ih) * in_w + iw;
-                                int32_t w_idx = (((oc * in_c) + ic) * k_h + kh) * k_w + kw;
-                                acc += static_cast<float>(input[in_idx]) * static_cast<float>(weights[w_idx]);
                             }
                         }
+                        int32_t out_idx = (((n * out_c + oc_global) * out_h) + oh) * out_w + ow;
+                        output[out_idx] = static_cast<scalar_t>(acc);
                     }
-                    int32_t out_idx = (((n * out_c + oc) * out_h) + oh) * out_w + ow;
-                    output[out_idx] = static_cast<scalar_t>(acc);
                 }
             }
         }
